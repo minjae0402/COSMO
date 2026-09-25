@@ -44,8 +44,6 @@ public class CheckSteamConnect : MonoBehaviour
 #if !DISABLESTEAMWORKS
     Callback<PersonaStateChange_t> personaStateChange;
     Callback<GameLobbyJoinRequested_t> lobbyJoinRequested;
-    Callback<GameRichPresenceJoinRequested_t> richPresenceRequestCallback;
-    Callback<AvatarImageLoaded_t> avatarImageLoaded;
     string localSteamId;
 #endif
 
@@ -69,8 +67,7 @@ public class CheckSteamConnect : MonoBehaviour
     {
         personaStateChange?.Dispose();
         lobbyJoinRequested?.Dispose();
-        richPresenceRequestCallback?.Dispose();
-        avatarImageLoaded?.Dispose();
+        SteamProfileManager.AvatarUpdated -= OnAvatarUpdated;
     }
 
     public bool Init()
@@ -126,8 +123,7 @@ public class CheckSteamConnect : MonoBehaviour
     {
         personaStateChange = Callback<PersonaStateChange_t>.Create(OnPersonaStateChange);
         lobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(OnLobbyJoinRequested);
-        richPresenceRequestCallback = Callback<GameRichPresenceJoinRequested_t>.Create(OnGameRichPresenceJoinRequested);
-        avatarImageLoaded = Callback<AvatarImageLoaded_t>.Create(OnAvatarImageLoaded);
+        SteamProfileManager.AvatarUpdated += OnAvatarUpdated;
     }
 
     public void ListenCallbacks()
@@ -154,16 +150,10 @@ public class CheckSteamConnect : MonoBehaviour
         SetNotice($"로비 초대: {data.m_steamIDLobby}");
     }
 
-    void OnGameRichPresenceJoinRequested(GameRichPresenceJoinRequested_t callback)
+    void OnAvatarUpdated(ulong steamId)
     {
-        Debug.Log($"Join request from {callback.m_steamIDFriend} with connect string: {callback.m_rgchConnect}");
-        SetNotice($"참가 요청: {callback.m_rgchConnect}");
-    }
-
-    void OnAvatarImageLoaded(AvatarImageLoaded_t data)
-    {
-        string id = data.m_steamID.ToString();
-        Texture2D avatar = GetFriendAvatar(data.m_steamID);
+        string id = steamId.ToString();
+        Texture2D avatar = GetFriendAvatar(new CSteamID(steamId));
 
         if (id == localSteamId)
             SetMyAvatar(avatar);
@@ -193,37 +183,7 @@ public class CheckSteamConnect : MonoBehaviour
 
     Texture2D GetFriendAvatar(CSteamID steamId)
     {
-        int imageId = SteamFriends.GetMediumFriendAvatar(steamId);
-        if (imageId <= 0)
-            return null;
-
-        if (!SteamUtils.GetImageSize(imageId, out uint width, out uint height) || width == 0 || height == 0)
-            return null;
-
-        byte[] data = new byte[width * height * 4];
-        if (!SteamUtils.GetImageRGBA(imageId, data, data.Length))
-            return null;
-
-        Texture2D texture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, false);
-        texture.LoadRawTextureData(data);
-        texture.Apply();
-        FlipTextureVertically(texture, (int)width, (int)height);
-        texture.Apply();
-        return texture;
-    }
-
-    static void FlipTextureVertically(Texture2D texture, int width, int height)
-    {
-        Color32[] pixels = texture.GetPixels32();
-        Color32[] flipped = new Color32[pixels.Length];
-        for (int y = 0; y < height; y++)
-        {
-            int source = y * width;
-            int destination = (height - 1 - y) * width;
-            System.Array.Copy(pixels, source, flipped, destination, width);
-        }
-
-        texture.SetPixels32(flipped);
+        return SteamProfileManager.GetMediumAvatarTexture(steamId);
     }
 #endif
 
